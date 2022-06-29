@@ -10,7 +10,7 @@ ARG RUNTIME_VERSION
 # Create function directory
 RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function
-COPY lambda_handler.py .
+COPY lambda_handler.py ${FUNCTION_DIR}
 COPY requirements.txt .
 # Optional – Install the function's dependencies
 RUN python${RUNTIME_VERSION} -m pip install -r requirements.txt --target ${FUNCTION_DIR}
