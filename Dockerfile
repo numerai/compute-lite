@@ -2,7 +2,7 @@ ARG FUNCTION_DIR="/home/app/"
 ARG RUNTIME_VERSION="3.9"
 
 # Stage 2 - build function and dependencies
-FROM public.ecr.aws/lambda/python:3.9 AS build-image
+FROM public.ecr.aws/lambda/python:${RUNTIME_VERSION} AS build-image
 
 # Include global args in this stage of the build
 ARG FUNCTION_DIR
