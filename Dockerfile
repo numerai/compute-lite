@@ -21,7 +21,7 @@ RUN python${RUNTIME_VERSION} -m pip install awslambdaric --target ${FUNCTION_DIR
 
 # Stage 3 - final runtime image
 # Grab a fresh copy of the Python image
-FROM public.ecr.aws/lambda/python:3.9
+FROM public.ecr.aws/lambda/python:${RUNTIME_VERSION}
 # Install aws-lambda-cpp build dependencies
 RUN yum update -yqq \
     && yum install -yqq \
