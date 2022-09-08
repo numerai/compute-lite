@@ -12,7 +12,7 @@ RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function
 COPY lambda_handler.py ${FUNCTION_DIR}
 COPY requirements.txt .
-RUN yum install git
+RUN yum install git -yqq
 # Optional – Install the function's dependencies
 RUN python${RUNTIME_VERSION} -m pip install -r requirements.txt --target ${FUNCTION_DIR}
 # Install Lambda Runtime Interface Client for Python
