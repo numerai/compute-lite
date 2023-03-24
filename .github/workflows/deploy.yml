@@ -25,6 +25,6 @@ jobs:
       - name: Set up twine username and password
         run: |
           echo "TWINE_PASSWORD=${{ secrets.TWINE_API_SECRET }}" >> $GITHUB_ENV
-          echo "TWINE_USERNAME=__token__ >> $GITHUB_ENV
+          echo "TWINE_USERNAME=__token__" >> $GITHUB_ENV
       - name: Upload to pypi
         run: python -m twine upload dist/
