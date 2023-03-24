@@ -20,11 +20,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Build dist
-        run: python -m build
       - name: Set up twine username and password
         run: |
           echo "TWINE_PASSWORD=${{ secrets.TWINE_API_SECRET }}" >> $GITHUB_ENV
           echo "TWINE_USERNAME=__token__" >> $GITHUB_ENV
-      - name: Upload to pypi
-        run: python -m twine upload dist/
+      - name: Build and upload to pypi
+        run: |
+          python -m build
+          python -m twine upload dist/
