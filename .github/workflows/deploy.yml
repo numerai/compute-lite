@@ -27,4 +27,4 @@ jobs:
       - name: Build and upload to pypi
         run: |
           python -m build
-          python -m twine upload dist/
+          python -m twine upload dist/*
