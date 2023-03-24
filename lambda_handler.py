@@ -1,143 +1,209 @@
-import argparse
 import pandas as pd
 from numerapi import NumerAPI
 import boto3
 import json
-import os
-import scipy
-import numpy as np
+import gc
+import logging
+import math
+from time import sleep
+import sys
+import traceback
+from pyarrow.parquet import ParquetFile
+import pyarrow.parquet as pq
+from numerapi.compute.model_pipeline import DefaultPipeline
 
 
-# TODO: figure out how to pass in numerapi keys
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-
-def neutralize(df,
-               columns,
-               neutralizers=None,
-               proportion=1.0,
-               normalize=True,
-               era_col="era"):
-    if neutralizers is None:
-        neutralizers = []
-    unique_eras = df[era_col].unique()
-    computed = []
-    for u in unique_eras:
-        df_era = df[df[era_col] == u]
-        scores = df_era[columns].values
-        if normalize:
-            scores2 = []
-            for x in scores.T:
-                x = (scipy.stats.rankdata(x, method='ordinal') - .5) / len(x)
-                x = scipy.stats.norm.ppf(x)
-                scores2.append(x)
-            scores = np.array(scores2).T
-        exposures = df_era[neutralizers].values
-
-        scores -= proportion * exposures.dot(
-            np.linalg.pinv(exposures.astype(np.float32), rcond=1e-6).dot(scores.astype(np.float32)))
-
-        scores /= scores.std(ddof=0)
-
-        computed.append(scores)
-
-    return pd.DataFrame(np.concatenate(computed),
-                        columns=columns,
-                        index=df.index)
-
-
-def get_biggest_change_features(corrs, n):
-    all_eras = corrs.index.sort_values()
-    h1_eras = all_eras[:len(all_eras) // 2]
-    h2_eras = all_eras[len(all_eras) // 2:]
-
-    h1_corr_means = corrs.loc[h1_eras, :].mean()
-    h2_corr_means = corrs.loc[h2_eras, :].mean()
-
-    corr_diffs = h2_corr_means - h1_corr_means
-    worst_n = corr_diffs.abs().sort_values(ascending=False).head(n).index.tolist()
-    return worst_n
+secretsmanager = boto3.client('secretsmanager')
+api_keys_secret = secretsmanager.get_secret_value(SecretId='numerai-api-keys')
+secret = json.loads(api_keys_secret['SecretString'])
 
 
 def run(event, context):
     napi = NumerAPI(
-        public_id="V22H76F7UGZXRFHUK7EWRG53TJC34OVW",
-        secret_key="6YCUIF523ALJIZE3GKIZU7BROOJRURHZQ3GAAJ4NAZHH7Z5GUWOAQKIY3LNZW753"
+        public_id=secret['public_id'],
+        secret_key=secret['secret_key']
     )
 
-    ERA_COL = "era"
-    TARGET_COL = "target_nomi_v4_20"
-    DATA_TYPE_COL = "data_type"
-    EXAMPLE_PREDS_COL = "example_preds"
+    model_id = event['model_id']
+    if 'data_version' in event:
+        data_version = event['data_version']
+    else:
+        data_version = 'v4'
 
-    os.makedirs(os.path.dirname("/tmp/v4/features.json"), exist_ok=True)
-    napi.download_dataset("v4/features.json", "/tmp/v4/features.json")
-    with open("/tmp/v4/features.json", "r") as f:
-        feature_metadata = json.load(f)
-    # features = list(feature_metadata["feature_stats"].keys()) # get all the features
-    features = feature_metadata["feature_sets"]["small"]  # get the small feature set
-    # features = feature_metadata["feature_sets"]["medium"] # get the medium feature set
+    if 'invocation_type' in event:
+        invocation_type = event['invocation_type']
+    else:
+        invocation_type = 'submission'
 
-    current_round = napi.get_current_round()
-    napi.download_dataset("v4/live.parquet", f"/tmp/v4/live_{current_round}.parquet")
-    read_columns = features + [ERA_COL, DATA_TYPE_COL, TARGET_COL]
-    live_data = pd.read_parquet(f'/tmp/v4/live_{current_round}.parquet',
-                                columns=read_columns)
+    request_id = context.aws_request_id
+    log_stream_name = context.log_stream_name
+    set_lambda_status(context.function_name, model_id, request_id, "in_progress", napi, log_stream_name)
 
-    riskiest_features = ['feature_censorial_leachier_rickshaw', 'feature_trisomic_hagiographic_fragrance',
-                         'feature_unsustaining_chewier_adnoun', 'feature_coastal_edible_whang',
-                         'feature_steric_coxcombic_relinquishment', 'feature_cyclopedic_maestoso_daguerreotypist',
-                         'feature_undrilled_wheezier_countermand', 'feature_unsizable_ancestral_collocutor',
-                         'feature_coraciiform_sciurine_reef', 'feature_piping_geotactic_cusp',
-                         'feature_corporatist_seborrheic_hopi', 'feature_unpainted_censual_pinacoid',
-                         'feature_queenliest_childing_ritual', 'feature_godliest_consistorian_woodpecker',
-                         'feature_undisguised_unenviable_stamen', 'feature_unswaddled_inenarrable_goody',
-                         'feature_subfusc_furriest_nervule', 'feature_froggier_unlearned_underworkman',
-                         'feature_septuple_bonapartean_sanbenito', 'feature_unreproved_cultish_glioma',
-                         'feature_ugrian_schizocarpic_skulk', 'feature_iffy_pretty_gumming',
-                         'feature_sodding_choosy_eruption', 'feature_tragical_rainbowy_seafarer',
-                         'feature_esculent_erotic_epoxy', 'feature_elaborate_intimate_bor',
-                         'feature_massive_demisable_spouse', 'feature_burning_phrygian_axinomancy',
-                         'feature_entopic_interpreted_subsidiary', 'feature_unventilated_sollar_bason',
-                         'feature_fribble_gusseted_stickjaw', 'feature_guardian_frore_rolling',
-                         'feature_bijou_penetrant_syringa', 'feature_distressed_bloated_disquietude',
-                         'feature_fearsome_merry_bluewing', 'feature_just_flavescent_draff',
-                         'feature_mancunian_stalky_charmeuse', 'feature_ecstatic_foundational_crinoidea']
+    try:
+        if invocation_type == 'submission':
+            run_submission(napi, model_id, data_version)
+        else:
+            run_diagnostics(napi, model_id, data_version)
 
-    s3 = boto3.client('s3')
-    s3.download_file('numerai-compute-984109184174', 'model.pkl', '/tmp/model.pkl')
-    model = pd.read_pickle(f"/tmp/model.pkl")
+        set_lambda_status(context.function_name, model_id, request_id, "complete", napi, log_stream_name)
+    except Exception as ex:
+        set_lambda_status(context.function_name, model_id, request_id, "error", napi, log_stream_name)
+        exception_type, exception_value, exception_traceback = sys.exc_info()
+        traceback_string = traceback.format_exception(exception_type, exception_value, exception_traceback)
+        err_msg = json.dumps({
+            "errorType": exception_type.__name__,
+            "errorMessage": str(exception_value),
+            "stackTrace": traceback_string
+        })
+        logger.error(err_msg)
+        return False
 
-    model_name = 'model'
-    model_expected_features = model.booster_.feature_name()
-    live_data.loc[:, f"preds_{model_name}"] = model.predict(
-        live_data.loc[:, model_expected_features])
-
-    live_data[f"preds_{model_name}_neutral_riskiest_50"] = neutralize(
-        df=live_data,
-        columns=[f"preds_{model_name}"],
-        neutralizers=riskiest_features,
-        proportion=1.0,
-        normalize=True,
-        era_col=ERA_COL
-    )
-
-    model_to_submit = f"preds_{model_name}_neutral_riskiest_50"
-
-    live_data["prediction"] = live_data[model_to_submit].rank(pct=True)
-
-    predict_output_path = f"/tmp/live_predictions_{current_round}.csv"
-    live_data["prediction"].to_csv(predict_output_path)
-
-    print(f'submitting {predict_output_path}')
-    napi.upload_predictions(predict_output_path, model_id='102052af-a3f4-44ea-b4e4-8d419d3ee4e2')
-    print(f''' ______  ______  ______  _____         __  ______  ______    
-/\  ___\/\  __ \/\  __ \/\  __-.      /\ \/\  __ \/\  == \   
-\ \ \__ \ \ \/\ \ \ \/\ \ \ \/\ \    _\_\ \ \ \/\ \ \  __<   
- \ \_____\ \_____\ \_____\ \____-   /\_____\ \_____\ \_____\ 
-  \/_____/\/_____/\/_____/\/____/   \/_____/\/_____/\/_____/ 
-                                                             ''')
     return True
 
 
+def run_submission(napi, model_id, data_version):
+    print(f'Running submission for model_id: {model_id}')
+    print(f'Data version: {data_version}')
+
+    current_round = napi.get_current_round()
+    live_data = get_data(napi, data_version, 'live')
+    logger.info(f'Downloaded live data')
+
+    model_name = 'model'
+    model, model_wrapper, features = get_model_wrapper_and_features(model_id)
+
+    live_data.loc[:, f"preds_{model_name}"] = model.predict(live_data.loc[:, features])
+
+    live_data["prediction"] = model_wrapper.post_predict(live_data[f"preds_{model_name}"], round_number=current_round)
+    logger.info(f'Live predictions and ranked')
+
+    predict_output_path = f"/tmp/live_predictions_{current_round}.csv"
+    if data_version == 'v2':
+        # v2 live data id column is not the index so needs to be specified in output here
+        live_data[["id", "prediction"]].to_csv(predict_output_path, index=False)
+    else:
+        live_data["prediction"].to_csv(predict_output_path)
+
+    print(f'submitting {predict_output_path}')
+    napi.upload_predictions(predict_output_path, model_id=model_id)
+    print('submission complete!')
+
+
+def run_diagnostics(napi, model_id, data_version):
+    print(f'Running submission for model_id: {model_id}')
+    print(f'Data version: {data_version}')
+
+    if data_version == 'v2':
+        raise AttributeError('Diagnostics for v2 is not supported')
+
+    # download validation data
+    data_filename = get_data_filename(data_version, 'validation')
+    data_local_path = f"/tmp/{data_version}/{data_filename}"
+    napi.download_dataset(f"{data_version}/{data_filename}", data_local_path)
+    logger.info(f'Downloaded validation data')
+
+    # predict on validation data
+    model_name = 'model'
+    model, model_wrapper, features = get_model_wrapper_and_features(model_id)
+
+    predictions = []
+    gc.collect()
+
+    parquet_file = pq.ParquetFile(data_local_path)
+    for batch in parquet_file.iter_batches(batch_size=32000, columns=features, use_pandas_metadata=True):
+        batch_df = batch.to_pandas()
+        batch_df.loc[:, f"preds_{model_name}"] = model.predict(batch_df.loc[:, features])
+        batch_df["prediction"] = model_wrapper.post_predict(batch_df[f"preds_{model_name}"], round_number=None)
+        predictions.append(batch_df["prediction"])
+
+    preds = pd.concat(predictions)
+    preds = preds.to_frame()
+
+    predict_output_path = f"/tmp/validation_predictions.csv"
+    preds["prediction"].to_csv(predict_output_path)
+
+    diagnostics_id = napi.upload_diagnostics(predict_output_path, tournament=8, model_id=model_id)
+    logger.info(f'diagnostics submitted, id: {diagnostics_id}')
+
+
+def set_lambda_status(function_name, model_id, request_id, status, napi, log_stream_name=None):
+    query = f'''
+        mutation setModelLambdaStatus($function_name: String!, $model_id: String!, $request_id: String!, $status: String!, $log_stream_name: String) {{
+          modelLambdaStatus(
+            functionName: $function_name, 
+            modelId: $model_id, 
+            requestId: $request_id, 
+            status: $status,
+            logStreamName: $log_stream_name) {{
+            requestId
+          }}
+        }}
+        '''
+    napi.raw_query(
+        query=query,
+        authorization=True,
+        variables={
+            'function_name': function_name,
+            'model_id': model_id,
+            'request_id': request_id,
+            'status': status,
+            'log_stream_name': log_stream_name
+        }
+    )
+
+
+def get_data_filename(data_version, data_type):
+    if data_version in ['v2', 'v3']:
+        return f'numerai_{data_type}_data.parquet'
+    return f'{data_type}.parquet'
+
+
+def get_data(napi, data_version, data_type):
+    data_filename = get_data_filename(data_version, data_type)
+    data_local_path = f"/tmp/{data_version}/{data_filename}"
+    napi.download_dataset(f"{data_version}/{data_filename}", data_local_path)
+    return pd.read_parquet(data_local_path)
+
+
+def get_model_wrapper_and_features(model_id):
+    s3 = boto3.client('s3')
+    aws_account_id = boto3.client('sts').get_caller_identity().get('Account')
+    try:
+        from custom_pipeline import CustomPipeline
+        model_wrapper = CustomPipeline(model_id)
+    except Exception as ex:
+        print('No custom model wrapper found, using default')
+        model_wrapper = DefaultPipeline(model_id)
+
+    pickle_prefix = '/tmp'
+    s3.download_file(
+        f'numerai-compute-{aws_account_id}',
+        f'{model_id}/{model_wrapper.pickled_model_path}',
+        f'{pickle_prefix}/{model_wrapper.pickled_model_path}')
+    model = model_wrapper.unpickle(pickle_prefix)
+
+    s3.download_file(f'numerai-compute-{aws_account_id}', f'{model_id}/features.json', '/tmp/features.json')
+    f = open('/tmp/features.json')
+    features = json.load(f)
+    logger.info(f'Loaded features {model_id}/features.json')
+    return model, model_wrapper, features
+
+
+def read_parquet_via_pandas_generator(filename, batch_size=128, reads_per_file=5):
+    num_rows = ParquetFile(filename).metadata.num_rows
+    cache_size = math.ceil(num_rows / batch_size / reads_per_file) * batch_size
+    batch_count = math.ceil(cache_size / batch_size)
+    for n_read in range(reads_per_file):
+        cache = pd.read_parquet(filename).iloc[cache_size * n_read: cache_size * (n_read + 1)].copy()
+        gc.collect()
+        sleep(1)  # sleep(1) is required to allow measurement of the garbage collector
+        for n_batch in range(batch_count):
+            yield cache[batch_size * n_batch: batch_size * (n_batch + 1)].copy()
+
+
+
 if __name__ == '__main__':
-    run(None, None)
+    run({}, {})
