@@ -10,7 +10,7 @@ import sys
 import traceback
 from pyarrow.parquet import ParquetFile
 import pyarrow.parquet as pq
-from numerapi.compute.model_pipeline import DefaultPipeline
+from model_pipeline import DefaultPipeline
 
 
 logger = logging.getLogger()
