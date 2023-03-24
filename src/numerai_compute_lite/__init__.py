@@ -1,0 +1,1 @@
+from numerai_compute_lite.main import deploy

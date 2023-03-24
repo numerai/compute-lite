@@ -1,0 +1,31 @@
+on:
+  push:
+    branches: [gold_release]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: "Deploy numerai_compute_lite to pypi"
+    runs-on: ubuntu-latest
+    env:
+      TWINE_API_SECRET: ${{ secrets.TWINE_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Build dist
+        run: python -m build
+      - name: Set up twine username and password
+        run: |
+          export TWINE_TOKEN=$(cat secret.txt)
+          echo "TWINE_PASSWORD=$TWINE_TOKEN" >> $GITHUB_ENV
+          echo "TWINE_USERNAME="__token__" >> $GITHUB_ENV
+      - name: Upload to pypi
+        run: python -m twine upload dist/

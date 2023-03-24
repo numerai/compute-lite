@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "boto3==1.23.10", "pandas>=1.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "numerai-compute-lite"
+version = "0.0.2"
+authors = [
+  { name="chanes", email="chris@numer.ai" },
+]
+description = "Quick and easy way to deploy your Numerai models"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/numerai/compute_lite"
+"Bug Tracker" = "https://github.com/numerai/compute_lite/issues"
