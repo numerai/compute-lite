@@ -10,7 +10,7 @@ ARG RUNTIME_VERSION
 # Create function directory
 RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function and custom_model.py if it exists
-COPY lambda_handler.py model_pipeline.py custom_pipeline.py* ${FUNCTION_DIR}
+COPY lambda_handler.py custom_pipeline.py* ${FUNCTION_DIR}
 COPY requirements.txt .
 RUN yum install git -yqq
 # Optional – Install the function's dependencies
