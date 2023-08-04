@@ -12,7 +12,11 @@ RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function and custom_model.py if it exists
 COPY lambda_handler.py custom_pipeline.py* ${FUNCTION_DIR}
 COPY requirements.txt .
-RUN yum install git -yqq
+RUN yum install -yqq \
+     git \
+     make \
+     cmake \
+     nasm
 # Optional – Install the function's dependencies
 RUN python${RUNTIME_VERSION} -m pip install -r requirements.txt --target ${FUNCTION_DIR}
 # Install Lambda Runtime Interface Client for Python
@@ -29,16 +33,13 @@ RUN yum update -yqq \
         build-essential \
         python3-dev \
         awscli \
-        make \
-        cmake \
         libcurl \
         build-base \
         libtool \
         autoconf \
         automake \
         libexecinfo-dev \
-        libgomp1 \
-        nasm
+        libgomp1
 # Include global arg in this stage of the build
 ARG FUNCTION_DIR
 # Set working directory to function root directory
