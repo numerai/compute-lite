@@ -16,6 +16,7 @@ RUN yum install -yqq \
      git \
      make \
      cmake \
+     build-essential \
      nasm
 # Optional – Install the function's dependencies
 RUN python${RUNTIME_VERSION} -m pip install -r requirements.txt --target ${FUNCTION_DIR}
@@ -30,7 +31,6 @@ FROM public.ecr.aws/lambda/python:${RUNTIME_VERSION}
 # Install aws-lambda-cpp build dependencies
 RUN yum update -yqq \
     && yum install -yqq \
-        build-essential \
         python3-dev \
         awscli \
         libcurl \
