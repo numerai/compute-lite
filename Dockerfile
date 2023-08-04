@@ -12,8 +12,9 @@ RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function and custom_model.py if it exists
 COPY lambda_handler.py custom_pipeline.py* ${FUNCTION_DIR}
 COPY requirements.txt .
-RUN yum update -yqq \
-    && yum install -yqq \
+RUN yum update -yqq
+RUN yum groupinstall -yqq 'Development Tools'
+RUN yum install -yqq \
         git \
         python3-dev \
         awscli \
