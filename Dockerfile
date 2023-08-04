@@ -37,7 +37,8 @@ RUN yum update -yqq \
         autoconf \
         automake \
         libexecinfo-dev \
-        libgomp1
+        libgomp1 \
+        nasm
 # Include global arg in this stage of the build
 ARG FUNCTION_DIR
 # Set working directory to function root directory
