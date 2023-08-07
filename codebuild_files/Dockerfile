@@ -12,7 +12,23 @@ RUN mkdir -p ${FUNCTION_DIR}
 # Copy handler function and custom_model.py if it exists
 COPY lambda_handler.py custom_pipeline.py* ${FUNCTION_DIR}
 COPY requirements.txt .
-RUN yum install git -yqq
+RUN yum update -yqq
+RUN yum groupinstall -yqq 'Development Tools'
+RUN yum install -yqq \
+        git \
+        python3-dev \
+        awscli \
+        libcurl \
+        build-base \
+        libtool \
+        autoconf \
+        automake \
+        libexecinfo-dev \
+        libgomp1 \
+        make \
+        cmake \
+        build-essential \
+        nasm
 # Optional – Install the function's dependencies
 RUN python${RUNTIME_VERSION} -m pip install -r requirements.txt --target ${FUNCTION_DIR}
 # Install Lambda Runtime Interface Client for Python
@@ -23,21 +39,6 @@ RUN python${RUNTIME_VERSION} -m pip install awslambdaric --target ${FUNCTION_DIR
 # Stage 3 - final runtime image
 # Grab a fresh copy of the Python image
 FROM public.ecr.aws/lambda/python:${RUNTIME_VERSION}
-# Install aws-lambda-cpp build dependencies
-RUN yum update -yqq \
-    && yum install -yqq \
-        build-essential \
-        python3-dev \
-        awscli \
-        make \
-        cmake \
-        libcurl \
-        build-base \
-        libtool \
-        autoconf \
-        automake \
-        libexecinfo-dev \
-        libgomp1
 # Include global arg in this stage of the build
 ARG FUNCTION_DIR
 # Set working directory to function root directory
