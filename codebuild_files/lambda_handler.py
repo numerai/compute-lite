@@ -179,10 +179,15 @@ def get_model_wrapper_and_features(model_id):
         model_wrapper = DefaultPipeline(model_id)
 
     pickle_prefix = '/tmp'
+    bucket = f'numerai-compute-{aws_account_id}'
+    key = f'{model_id}/{model_wrapper.pickled_model_path}'
+    local_path = f'{pickle_prefix}/{model_wrapper.pickled_model_path}'
+    print(f'downloading: s3://{bucket}/{key} to: {local_path}')
     s3.download_file(
-        f'numerai-compute-{aws_account_id}',
-        f'{model_id}/{model_wrapper.pickled_model_path}',
-        f'{pickle_prefix}/{model_wrapper.pickled_model_path}')
+        bucket,
+        key,
+        local_path
+    )
     model = model_wrapper.unpickle(pickle_prefix)
 
     s3.download_file(f'numerai-compute-{aws_account_id}', f'{model_id}/features.json', '/tmp/features.json')
