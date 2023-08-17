@@ -44,7 +44,21 @@ ARG FUNCTION_DIR
 # Set working directory to function root directory
 WORKDIR ${FUNCTION_DIR}
 RUN yum update -yqq
-RUN yum install libgomp
+RUN yum install -yqq \
+        git \
+        python3-dev \
+        awscli \
+        libcurl \
+        build-base \
+        libtool \
+        autoconf \
+        automake \
+        libexecinfo-dev \
+        libgomp \
+        make \
+        cmake \
+        build-essential \
+        nasm
 # Copy in the built dependencies
 COPY --from=build-image ${FUNCTION_DIR} ${FUNCTION_DIR}
 
