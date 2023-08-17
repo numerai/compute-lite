@@ -24,7 +24,7 @@ RUN yum install -yqq \
         autoconf \
         automake \
         libexecinfo-dev \
-        libgomp1 \
+        libgomp \
         make \
         cmake \
         build-essential \
